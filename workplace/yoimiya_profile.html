@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>宵宫 · 夏祭的女王 —《原神》角色介绍</title>
+<style>
+  :root {
+    --bg-0: #1a0f0a;
+    --bg-1: #2a1810;
+    --card: #341e12;
+    --card-2: #3f2515;
+    --gold: #ffcf6b;
+    --gold-strong: #ffb43d;
+    --pyro: #ff7a3c;
+    --pyro-deep: #e0481f;
+    --text: #f6e6d2;
+    --muted: #c9a988;
+    --line: rgba(255, 180, 90, 0.22);
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+                 "Noto Sans SC", "Source Han Sans SC", system-ui, -apple-system, sans-serif;
+    color: var(--text);
+    line-height: 1.75;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(255, 140, 60, 0.28), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(255, 200, 90, 0.18), transparent 55%),
+      radial-gradient(700px 700px at 50% 120%, rgba(224, 72, 31, 0.22), transparent 60%),
+      linear-gradient(160deg, var(--bg-1), var(--bg-0) 70%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  a { color: var(--gold); }
+
+  /* ---------- Header ---------- */
+  header.hero {
+    position: relative;
+    text-align: center;
+    padding: 72px 20px 56px;
+    overflow: hidden;
+    border-bottom: 1px solid var(--line);
+  }
+  header.hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(2px 2px at 12% 30%, #ffd98a, transparent),
+      radial-gradient(2px 2px at 28% 70%, #ffb057, transparent),
+      radial-gradient(3px 3px at 44% 22%, #ffe6b0, transparent),
+      radial-gradient(2px 2px at 62% 60%, #ff9a4d, transparent),
+      radial-gradient(2px 2px at 78% 32%, #ffd98a, transparent),
+      radial-gradient(3px 3px at 88% 74%, #ffbe63, transparent),
+      radial-gradient(2px 2px at 96% 44%, #ffe6b0, transparent);
+    opacity: 0.75;
+    pointer-events: none;
+  }
+  header.hero .kicker {
+    display: inline-block;
+    letter-spacing: 0.5em;
+    text-indent: 0.5em;
+    font-size: 0.78rem;
+    color: var(--gold);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 18px;
+    margin-bottom: 18px;
+    background: rgba(255, 180, 90, 0.08);
+  }
+  header.hero h1 {
+    font-size: clamp(2.4rem, 7vw, 4.2rem);
+    margin: 0 0 8px;
+    letter-spacing: 0.12em;
+    background: linear-gradient(120deg, #fff3d6, var(--gold-strong) 45%, var(--pyro) 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 40px rgba(255, 150, 60, 0.35);
+  }
+  header.hero .subtitle {
+    margin: 6px 0 0;
+    font-size: clamp(1rem, 2.5vw, 1.35rem);
+    color: var(--gold);
+    letter-spacing: 0.28em;
+    text-indent: 0.28em;
+  }
+  header.hero .latin {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: var(--muted);
+    letter-spacing: 0.18em;
+  }
+
+  /* ---------- Layout ---------- */
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 0 20px 80px;
+  }
+
+  section.card {
+    background: linear-gradient(155deg, var(--card), var(--card-2));
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 30px clamp(20px, 4vw, 42px);
+    margin: 32px 0;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 220, 150, 0.06);
+  }
+
+  section.card > h2 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 1.45rem;
+    margin: 0 0 20px;
+    color: var(--gold);
+    letter-spacing: 0.08em;
+  }
+  section.card > h2::before {
+    content: "";
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #ffe6b0, var(--pyro-deep));
+    box-shadow: 0 0 14px rgba(255, 140, 60, 0.9);
+    flex: none;
+  }
+  section.card > h2::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--line), transparent);
+  }
+
+  p { margin: 0 0 14px; }
+  p:last-child { margin-bottom: 0; }
+
+  strong, b { color: var(--gold-strong); }
+
+  /* ---------- Identity grid ---------- */
+  .identity-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px;
+    margin-top: 4px;
+  }
+  .identity-grid .item {
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 16px;
+  }
+  .identity-grid .item .label {
+    font-size: 0.78rem;
+    color: var(--muted);
+    letter-spacing: 0.14em;
+    display: block;
+    margin-bottom: 3px;
+  }
+  .identity-grid .item .value {
+    font-size: 1.02rem;
+    color: var(--text);
+  }
+  .identity-grid .item .value em { color: var(--muted); font-style: normal; font-size: 0.88rem; }
+
+  .tagline {
+    margin-top: 22px;
+    border-left: 4px solid var(--pyro);
+    background: rgba(255, 122, 60, 0.1);
+    padding: 14px 18px;
+    border-radius: 0 12px 12px 0;
+    font-size: 1.05rem;
+    color: #ffe9cf;
+  }
+
+  /* ---------- Creed / callout ---------- */
+  .creed {
+    text-align: center;
+    border: 1px dashed var(--line);
+    border-radius: 16px;
+    padding: 24px 18px;
+    margin: 22px 0 6px;
+    background: radial-gradient(circle at 50% 0%, rgba(255, 160, 70, 0.16), transparent 70%);
+  }
+  .creed .text {
+    font-size: clamp(1.3rem, 4vw, 1.9rem);
+    letter-spacing: 0.3em;
+    text-indent: 0.3em;
+    color: var(--gold-strong);
+    margin-bottom: 6px;
+  }
+  .creed .note { color: var(--muted); font-size: 0.92rem; letter-spacing: 0.05em; }
+
+  /* ---------- Ability list ---------- */
+  .abilities { list-style: none; padding: 0; margin: 0; }
+  .abilities li {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 12px;
+    background: rgba(0, 0, 0, 0.2);
+  }
+  .abilities li:last-child { margin-bottom: 0; }
+  .abilities .name {
+    color: var(--gold-strong);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .abilities .name small { color: var(--muted); font-weight: 400; letter-spacing: 0; }
+
+  .constellation-title {
+    margin: 26px 0 12px;
+    color: var(--gold);
+    font-size: 1.06rem;
+    letter-spacing: 0.06em;
+  }
+
+  /* ---------- Sources ---------- */
+  ul.sources { list-style: none; padding: 0; margin: 0; }
+  ul.sources li {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  ul.sources li:last-child { margin-bottom: 0; }
+  ul.sources a {
+    color: var(--gold-strong);
+    text-decoration: none;
+    font-weight: 700;
+    word-break: break-all;
+    border-bottom: 1px dashed rgba(255, 180, 90, 0.5);
+    transition: color 0.2s ease, border-color 0.2s ease;
+    align-self: flex-start;
+  }
+  ul.sources a:hover,
+  ul.sources a:focus {
+    color: #fff3d6;
+    border-bottom-color: #fff3d6;
+  }
+  ul.sources .desc { color: var(--muted); font-size: 0.9rem; }
+
+  /* ---------- Footer ---------- */
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    padding: 34px 20px 50px;
+    border-top: 1px solid var(--line);
+    line-height: 1.9;
+  }
+  footer .hearts { color: var(--pyro); }
+
+  @media (max-width: 520px) {
+    header.hero { padding: 54px 16px 40px; }
+    section.card { padding: 24px 18px; margin: 22px 0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <span class="kicker">原神 · 稻妻 · 五星角色</span>
+  <h1>宵宫</h1>
+  <p class="subtitle">夏祭的女王</p>
+  <p class="latin">Naganohara Yoimiya · 长野原宵宫 · 琉焰华舞</p>
+</header>
+
+<main>
+
+  <!-- 角色简介 -->
+  <section class="card" id="intro">
+    <h2>角色简介</h2>
+    <p>
+      <strong>宵宫</strong>（全名 <strong>长野原宵宫</strong>，Naganohara Yoimiya）是《原神》中登场于
+      <strong>稻妻</strong>地区的五星角色，使用<strong>火</strong>元素，武器为<strong>弓</strong>。
+      她是稻妻最具盛名的烟花师，也是「长野原烟花店」当代的当家与招牌，被人们尊称为
+      「<strong>夏祭的女王</strong>」。她充满如<strong>火</strong>焰般的热情，将永不妥协的孩童天真与对手艺的执念
+      交织在一起，绽放出令人惊叹的光华。
+    </p>
+
+    <div class="identity-grid">
+      <div class="item"><span class="label">全名</span><span class="value">长野原宵宫 <em>Naganohara Yoimiya</em></span></div>
+      <div class="item"><span class="label">称号</span><span class="value">「夏祭的女王」</span></div>
+      <div class="item"><span class="label">元素</span><span class="value">火 <em>Pyro</em></span></div>
+      <div class="item"><span class="label">武器</span><span class="value">弓 <em>Bow</em></span></div>
+      <div class="item"><span class="label">所属地区</span><span class="value">稻妻 <em>Inazuma</em></span></div>
+      <div class="item"><span class="label">所属组织</span><span class="value">长野原烟花店 <em>Naganohara Fireworks</em></span></div>
+      <div class="item"><span class="label">命之座</span><span class="value">琉金座 <em>Carassius Auratus</em></span></div>
+      <div class="item"><span class="label">生日</span><span class="value">6 月 21 日</span></div>
+      <div class="item"><span class="label">稀有度</span><span class="value">★★★★★ 五星</span></div>
+    </div>
+
+    <p class="tagline">
+      官方描述：才情出众的烟花师。长野原烟花店的现任店主，被称作「夏祭的女王」。
+      一位充满如火般热情的女孩，孩童般天真的执拗与对手艺的执着在她身上交融，
+      迸发出令人目眩的绚丽。
+    </p>
+  </section>
+
+  <!-- 角色性格 -->
+  <section class="card" id="personality">
+    <h2>角色性格</h2>
+    <p>
+      宵宫性格开朗热情、亲和而健谈，是稻妻人眼中自带光芒的「小太阳」。
+      她总能迅速与人打成一片，既善于倾听，也乐于倾诉，分寸拿捏得恰到好处。
+    </p>
+    <p>
+      她尤其喜欢和孩子们一起玩耍，被街坊的孩子们亲切地唤作「<strong>英雄姐姐</strong>」。
+      她会在夏祭的夜晚为孩子们点燃烟花，也会认真倾听他们天马行空的愿望。
+      在待人接物上，她细腻而富有同理心，同时又坚守自己的原则与匠心。
+    </p>
+
+    <div class="creed">
+      <div class="text">烟花易逝，人情长存</div>
+      <p class="note">
+        这是宵宫的信念——烟花虽转瞬即逝，但它所带来的感动与记忆却能长存人间。
+        这份对「记忆中的永恒」的追求，与稻妻对「永恒」的另一种理解形成了有趣的映照。
+      </p>
+    </div>
+  </section>
+
+  <!-- 背景故事 -->
+  <section class="card" id="story">
+    <h2>背景故事</h2>
+    <p>
+      宵宫出身于稻妻的烟花世家「长野原」，家族世代以制作烟花为业。
+      她继承了这一门手艺，成为稻妻首屈一指的<strong>烟花师</strong>，并接掌了
+      <strong>长野原烟花店</strong>，将其发扬光大。
+    </p>
+    <p>
+      长野原家有一项温暖的传统：为客人留下一张「<strong>烟花便笺</strong>」。
+      只要记下烟花的配方，哪怕时隔多年，也能为客人原样重现当年的那朵烟花，
+      让记忆与心意得以延续。
+    </p>
+    <p>
+      她的父亲<strong>长野原龙之介</strong>曾因一场工作事故而失聪，这让宵宫更加懂事，
+      也更珍惜人与人之间的情谊。她自己的<strong>火</strong>元素神之眼，则是在一次点燃烟花时，
+      因随手使用的打火机而获得的；起初她并未太在意，只是随手收了起来。
+    </p>
+  </section>
+
+  <!-- 能力与命之座 -->
+  <section class="card" id="abilities">
+    <h2>能力与命之座</h2>
+    <ul class="abilities">
+      <li>
+        <span class="name">普通攻击 · 烟火打扬 <small>Firework Flare-Up</small></span>
+        <p>进行弓箭射击。长按可蓄力，一段蓄力射出附着<strong>火</strong>元素的箭矢；
+        二段蓄力则会生成至多三枚追踪目标的「焰硝箭」。</p>
+      </li>
+      <li>
+        <span class="name">元素战技 · 焰硝庭火舞 <small>Niwabi Fire-Dance</small></span>
+        <p>挥舞烟花棒，将箭矢变为「焰硝箭」，提升伤害并转化为<strong>火</strong>元素伤害，
+        进入「焰硝花火」状态。</p>
+      </li>
+      <li>
+        <span class="name">元素爆发 · 琉金云间草 <small>Ryuukin Saxifrage</small></span>
+        <p>跃起并投放自制的火箭，造成范围<strong>火</strong>元素伤害，并为命中的目标附加
+        「<strong>金鱼草</strong>」（Aurous Blaze）标记；队伍中其他角色的攻击会引发额外爆炸。</p>
+      </li>
+    </ul>
+
+    <h3 class="constellation-title">命之座 · 琉金座（Carassius Auratus）</h3>
+    <ul class="abilities">
+      <li><span class="name">C1 · 赤团开时 <small>Agate Ryuukin</small></span></li>
+      <li><span class="name">C2 · 万灯送火 <small>A Procession of Bonfires</small></span></li>
+      <li><span class="name">C3 · 小心火烛 <small>Trickster's Flare</small></span></li>
+      <li><span class="name">C4 · 金科玉律 <small>Pyrotechnic Professional</small></span></li>
+      <li><span class="name">C5 · 夏祭的女王 <small>A Summer Festival's Eve</small></span></li>
+      <li><span class="name">C6 · 长野原流星群 <small>Naganohara Meteor Swarm</small></span></li>
+    </ul>
+  </section>
+
+  <!-- 剧情角色 -->
+  <section class="card" id="plot">
+    <h2>剧情角色</h2>
+    <p>
+      在稻妻「<strong>眼狩令</strong>」（Vision Hunt Decree）时期，宵宫悄悄帮助那些可能失去神之眼的人。
+      她曾把一枚由工匠正胜制作的假神之眼交给市民，帮助其躲过搜缴。
+    </p>
+    <p>
+      她与旅行者一同前往町奉行所，搭救制作假神之眼的工匠；途中她以烟花为掩护完成营救，
+      虽被九条裟罗发现，却也被默许离开，随后又带正胜前去就医。
+    </p>
+    <p>
+      她登场于魔神任务第二章第一幕「<strong>不动鸣神，泡影断灭</strong>」，
+      玩家需先完成她的传说任务才能推进剧情。她的传说任务名为「<strong>琉金之章</strong>」，
+      而宵宫也是首位拥有两部传说任务的非神明角色。
+    </p>
+  </section>
+
+  <!-- 参考来源 -->
+  <section class="card" id="sources">
+    <h2>参考来源</h2>
+    <ul class="sources">
+      <li>
+        <a href="https://genshin-impact.fandom.com/wiki/Yoimiya" target="_blank" rel="noopener">Genshin Impact Wiki (Fandom) · Yoimiya</a>
+        <span class="desc">英文粉丝维基主页，涵盖宵宫的档案、所属组织与技能等资料。</span>
+      </li>
+      <li>
+        <a href="https://zh.wikipedia.org/zh-hans/%E5%AE%B5%E5%AE%AB" target="_blank" rel="noopener">维基百科（中文）· 宵宫</a>
+        <span class="desc">介绍角色设定、剧情经历与配音等的综合条目。</span>
+      </li>
+      <li>
+        <a href="https://ys.mihoyo.com/main/news/detail/15774" target="_blank" rel="noopener">《原神》官方网站 ·「庆典开场，烟花绽放！」</a>
+        <span class="desc">米哈游官方发布的宵宫相关公告与宣传资讯。</span>
+      </li>
+    </ul>
+  </section>
+
+</main>
+
+<footer>
+  <p>本页资料整理自上述公开来源，仅供角色介绍与学习交流之用。<span class="hearts">🎆</span></p>
+  <p>《原神》及相关角色、名称版权归 miHoYo / HoYoverse 所有。</p>
+</footer>
+
+</body>
+</html>

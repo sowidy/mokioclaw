@@ -1,0 +1,296 @@
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
+console = Console()
+
+STATUS_SYMBOLS = {
+    "pending": "[ ]",
+    "in_progress": "[>]",
+    "completed": "[x]",
+    "blocked": "[!]",
+}
+
+STATUS_STYLES = {
+    "pending": "dim",
+    "in_progress": "bold yellow",
+    "completed": "bold green",
+    "blocked": "bold red",
+}
+
+
+def safe_echo(message: Any = "", **_: Any) -> None:
+    console.print(str(message))
+
+
+def safe_secho(message: Any = "", **kwargs: Any) -> None:
+    color = kwargs.get("fg") or kwargs.get("style")
+    console.print(str(message), style=color)
+
+
+def _shorten(value: Any, limit: int = 260) -> str:
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def print_event(event: dict[str, Any]) -> None:
+    event_type = event.get("type")
+    if event_type == "workspace":
+        console.print(Panel(str(event["path"]), title="Workspace", border_style="blue", box=box.ROUNDED))
+        return
+    if event_type == "custom_event":
+        print_custom_event(event["value"])
+        return
+    if event_type in ("graph_event", "agent_event"):
+        print_graph_event(event.get("event") or event.get("value") or {})
+        return
+    console.print(_shorten(event))
+
+
+def print_custom_event(event: dict[str, Any]) -> None:
+    event_type = event.get("type")
+    if event_type == "plan_snapshot":
+        render_plan(event, title=f"Plan Snapshot · {event.get('node', 'graph')}")
+        return
+    if event_type == "todo_update":
+        render_plan(event, title="Todo Updated", border_style="yellow")
+        return
+    if event_type == "tool_call":
+        console.print(
+            Panel(
+                _format_args(event.get("args", {})),
+                title=f"Tool Call · {event.get('node', 'agent')} · {event.get('name')}",
+                border_style="magenta",
+                box=box.ROUNDED,
+            )
+        )
+        return
+    if event_type == "tool_result":
+        result = event.get("result")
+        style = "green"
+        if isinstance(result, dict) and result.get("ok") is False:
+            style = "red"
+        console.print(
+            Panel(
+                _format_tool_result(result),
+                title=f"Tool Result · {event.get('node', 'agent')} · {event.get('name')}",
+                border_style=style,
+                box=box.ROUNDED,
+            )
+        )
+        return
+    if event_type == "handoff":
+        render_handoff(event)
+        return
+    if event_type == "handoff_result":
+        render_handoff_result(event)
+        return
+    if event_type == "search_results":
+        render_sources(event.get("sources", []), title=f"searchAgent · {event.get('query', '')}", answer=event.get("answer") or event.get("answers") or "")
+        return
+    if event_type == "search_summary":
+        render_sources(event.get("sources", []), title="searchAgent Summary", answer=event.get("summary", ""))
+        return
+    if event_type == "context_monitor":
+        render_context_monitor(event)
+        return
+    if event_type == "context_compression":
+        render_context_compression(event)
+        return
+    console.print(Panel(_shorten(event, 1000), title="Event", box=box.ROUNDED))
+
+
+def print_graph_event(payload: dict[str, Any]) -> None:
+    if not isinstance(payload, dict):
+        console.print(_shorten(payload))
+        return
+
+    for node, update in payload.items():
+        if not isinstance(update, dict):
+            console.print(Panel(_shorten(update), title=str(node), box=box.ROUNDED))
+            continue
+        if node == "planner":
+            render_plan(update, title="Planner", border_style="cyan")
+        elif node in {"actor", "codeAgent"}:
+            summary = update.get("code_agent_summary") or update.get("last_actor_summary")
+            if summary:
+                console.print(Panel(_shorten(summary, 1200), title="codeAgent Summary", border_style="cyan"))
+        elif node == "verifier":
+            render_verifier(update)
+        elif node == "context_monitor":
+            render_context_monitor(update)
+        elif node == "context_compressor":
+            render_context_compression(update)
+        elif node == "final":
+            render_final(update)
+        else:
+            console.print(Panel(_shorten(update, 1200), title=str(node), box=box.ROUNDED))
+
+
+def render_plan(update: dict[str, Any], *, title: str, border_style: str = "cyan") -> None:
+    plan = update.get("plan_summary", "")
+    todos = update.get("todos", [])
+    commands = update.get("verification_commands", [])
+
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style="bold")
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("State", no_wrap=True)
+    table.add_column("Todo")
+    table.add_column("Note", style="dim")
+    for todo in todos:
+        status = todo.get("status", "pending")
+        table.add_row(
+            todo.get("id", ""),
+            Text(STATUS_SYMBOLS.get(status, "[?]"), style=STATUS_STYLES.get(status, "")),
+            todo.get("content", ""),
+            todo.get("note", ""),
+        )
+
+    command_text = "\n".join(f"  - {command}" for command in commands)
+    body = Table.grid(expand=True)
+    if plan:
+        body.add_row(Text(plan, style="bold"))
+    if todos:
+        body.add_row(table)
+    if commands:
+        body.add_row(Text("Verifier commands\n" + command_text, style="green"))
+    console.print(Panel(body, title=title, border_style=border_style, box=box.ROUNDED))
+
+
+def render_verifier(update: dict[str, Any]) -> None:
+    table = Table(box=box.SIMPLE_HEAVY, header_style="bold")
+    table.add_column("Check")
+    table.add_column("Status")
+    table.add_column("Detail")
+    checks = update.get("verification_checks") or []
+    if checks:
+        for check in checks:
+            ok = bool(check.get("passed"))
+            status = Text("PASS" if ok else "FAIL", style="bold green" if ok else "bold red")
+            table.add_row(check.get("name", "check"), status, _shorten(check.get("detail", ""), 260))
+    else:
+        for result in update.get("verification_results", []):
+            ok = bool(result.get("ok"))
+            status = Text("PASS" if ok else "FAIL", style="bold green" if ok else "bold red")
+            output = result.get("stdout") or result.get("stderr") or ""
+            table.add_row(result.get("command", ""), status, _shorten(output, 260))
+    footer = f"passed={update.get('passed')} | attempts={update.get('attempts')}"
+    panel_grid = Table.grid(expand=True)
+    summary = update.get("verifier_summary")
+    if summary:
+        panel_grid.add_row(Text(_shorten(summary, 600), style="bold"))
+    panel_grid.add_row(table)
+    panel_grid.add_row(Text(footer, style="yellow"))
+    console.print(Panel(panel_grid, title="Verifier", border_style="green" if update.get("passed") else "red"))
+
+
+def render_final(update: dict[str, Any]) -> None:
+    answer = update.get("final_answer", "")
+    style = "green" if "PASSED" in answer else "red"
+    console.print(Panel(_shorten(answer, 20000), title="Final", border_style=style, box=box.ROUNDED))
+
+
+def render_context_monitor(update: dict[str, Any]) -> None:
+    should = bool(update.get("context_should_compress", update.get("should_compress")))
+    token_count = update.get("context_token_count", update.get("token_count", 0))
+    token_limit = update.get("context_token_limit", update.get("token_limit", 0))
+    next_node = update.get("context_next_node", update.get("next_node", ""))
+    message_count = update.get("message_count")
+    lines = [
+        f"tokens: {token_count} / {token_limit}",
+        f"compress: {should}",
+        f"next: {next_node}",
+    ]
+    if message_count is not None:
+        lines.append(f"messages: {message_count}")
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="Context Monitor",
+            border_style="yellow" if should else "blue",
+            box=box.ROUNDED,
+        )
+    )
+
+
+def render_context_compression(update: dict[str, Any]) -> None:
+    events = update.get("compression_events")
+    if events:
+        event = events[-1]
+    else:
+        event = update
+    lines = [
+        f"tokens: {event.get('before_tokens')} -> {event.get('after_tokens')}",
+        f"removed messages: {event.get('removed_messages')}",
+        f"next: {event.get('next_node')}",
+    ]
+    summary = event.get("summary")
+    if summary:
+        lines.append("summary:\n" + _shorten(summary, 900))
+    console.print(Panel("\n".join(lines), title="Context Compression", border_style="yellow", box=box.ROUNDED))
+
+
+def _format_args(args: Any) -> str:
+    return _shorten(args, 900)
+
+
+def _format_tool_result(result: Any) -> str:
+    if not isinstance(result, dict):
+        return _shorten(result, 900)
+    keys = ["ok", "type", "path", "exit_code", "timed_out", "duration_ms", "error"]
+    lines = [f"{key}: {result[key]}" for key in keys if key in result]
+    if "stdout" in result and result["stdout"]:
+        lines.append("stdout:\n" + _shorten(result["stdout"], 500))
+    if "stderr" in result and result["stderr"]:
+        lines.append("stderr:\n" + _shorten(result["stderr"], 500))
+    if "todos" in result:
+        lines.append(f"todos: {len(result['todos'])} item(s)")
+    if "answer" in result and result["answer"]:
+        lines.append("answer:\n" + _shorten(result["answer"], 500))
+    if "results" in result:
+        lines.append(f"sources: {len(result['results'])} item(s)")
+    if "summary" in result and result["summary"]:
+        lines.append("summary:\n" + _shorten(result["summary"], 500))
+    if "sources" in result:
+        lines.append(f"sources: {len(result['sources'])} item(s)")
+    if not lines:
+        lines.append(_shorten(result, 900))
+    return "\n".join(lines)
+
+
+def render_handoff(event: dict[str, Any]) -> None:
+    title = f"Handoff · {event.get('from', 'agent')} -> {event.get('to', 'agent')}"
+    console.print(Panel(_shorten(event.get("instruction", ""), 900), title=title, border_style="blue", box=box.ROUNDED))
+
+
+def render_handoff_result(event: dict[str, Any]) -> None:
+    title = f"Return · {event.get('from', 'agent')} -> {event.get('to', 'agent')}"
+    console.print(Panel(_shorten(event.get("result", ""), 1200), title=title, border_style="cyan", box=box.ROUNDED))
+
+
+def render_sources(sources: list[dict[str, Any]], *, title: str, answer: str = "") -> None:
+    table = Table(box=box.SIMPLE_HEAVY, header_style="bold")
+    table.add_column("Title")
+    table.add_column("URL")
+    table.add_column("Snippet")
+    for source in sources[:6]:
+        table.add_row(
+            _shorten(source.get("title", ""), 48),
+            _shorten(source.get("url", ""), 58),
+            _shorten(source.get("content", ""), 120),
+        )
+    body = Table.grid(expand=True)
+    if answer:
+        body.add_row(Text(_shorten(answer, 900), style="bold"))
+    if sources:
+        body.add_row(table)
+    console.print(Panel(body, title=title, border_style="blue", box=box.ROUNDED))
