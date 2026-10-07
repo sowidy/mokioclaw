@@ -94,6 +94,9 @@ def print_custom_event(event: dict[str, Any]) -> None:
     if event_type == "handoff_result":
         render_handoff_result(event)
         return
+    if event_type == "memory_snapshot":
+        render_memory_snapshot(event)
+        return
     if event_type == "search_results":
         render_sources(event.get("sources", []), title=f"searchAgent · {event.get('query', '')}", answer=event.get("answer") or event.get("answers") or "")
         return
@@ -107,6 +110,30 @@ def print_custom_event(event: dict[str, Any]) -> None:
         render_context_compression(event)
         return
     console.print(Panel(_shorten(event, 1000), title="Event", box=box.ROUNDED))
+
+
+def render_memory_snapshot(update: dict[str, Any]) -> None:
+    layers = update.get("layers", {})
+    table = Table(box=box.SIMPLE_HEAVY, header_style="bold")
+    table.add_column("Layer", no_wrap=True)
+    table.add_column("Summary")
+    for name in ("rules", "working_memory", "history_summary_store"):
+        table.add_row(name, _shorten(layers.get(name, ""), 360))
+
+    footer = (
+        f"node={update.get('node', '')} | "
+        f"rules={update.get('rules_count', 0)} | "
+        f"todos={update.get('todo_count', 0)} | "
+        f"sources={update.get('source_count', 0)} | "
+        f"handoffs={update.get('handoff_count', 0)} | "
+        f"notepad={update.get('notepad_exists')} | "
+        f"history={update.get('history_exists')} {update.get('history_path', '')}"
+    )
+    body = Table.grid(expand=True)
+    body.add_row(table)
+    body.add_row(Text(footer, style="yellow"))
+    console.print(Panel(body, title="Memory Snapshot", border_style="cyan", box=box.ROUNDED))
+
 
 
 def print_graph_event(payload: dict[str, Any]) -> None:
@@ -128,6 +155,8 @@ def print_graph_event(payload: dict[str, Any]) -> None:
             render_verifier(update)
         elif node == "context_monitor":
             render_context_monitor(update)
+        elif node == "memory_snapshot":
+            render_memory_snapshot(update)
         elif node == "context_compressor":
             render_context_compression(update)
         elif node == "final":
@@ -246,16 +275,37 @@ def _format_args(args: Any) -> str:
 def _format_tool_result(result: Any) -> str:
     if not isinstance(result, dict):
         return _shorten(result, 900)
-    keys = ["ok", "type", "path", "exit_code", "timed_out", "duration_ms", "error"]
+    keys = [
+        "ok",
+        "type",
+        "path",
+        "exit_code",
+        "timed_out",
+        "duration_ms",
+        "requires_approval",
+        "approved",
+        "approval_id",
+        "risk_reason",
+        "error",
+        "background",
+        "pid",
+    ]
     lines = [f"{key}: {result[key]}" for key in keys if key in result]
     if "stdout" in result and result["stdout"]:
         lines.append("stdout:\n" + _shorten(result["stdout"], 500))
     if "stderr" in result and result["stderr"]:
         lines.append("stderr:\n" + _shorten(result["stderr"], 500))
+    for path_key in ("stdout_path", "stderr_path"):
+        if result.get(path_key):
+            lines.append(f"{path_key}: {result[path_key]}")
     if "todos" in result:
         lines.append(f"todos: {len(result['todos'])} item(s)")
     if "answer" in result and result["answer"]:
         lines.append("answer:\n" + _shorten(result["answer"], 500))
+    if "heading" in result:
+        lines.append(f"heading: {result['heading']}")
+    if "content" in result and result["content"]:
+        lines.append("content:\n" + _shorten(result["content"], 500))
     if "results" in result:
         lines.append(f"sources: {len(result['results'])} item(s)")
     if "summary" in result and result["summary"]:

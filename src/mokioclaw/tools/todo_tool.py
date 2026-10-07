@@ -1,6 +1,10 @@
 import json
+from typing import Any
+
+from mokioclaw.core.state import RuntimeState
 
 VALID_TODO_STATUSES = {"pending", "in_progress", "completed", "blocked"}
+TODO_FILE = "TODO.md"
 
 def _normalize_items(items):
     """
@@ -18,8 +22,14 @@ def _normalize_items(items):
             return [line.strip("-") for line in stripped.splitlines() if line.strip()]
         return _normalize_items(decode)
     if isinstance(items, dict):
-        value = items.get("content") or items.get("title") or items.get("command")
-        return [str(value).strip()] if value else []
+        value = items.get("content") or items.get("description") or items.get("title") or items.get("text") or items.get("command")
+        if value:
+            return [str(value).strip()]
+        normalized: list[str] = []
+        for key, item in items.items():
+            child_items = _normalize_items(item)
+            normalized.extend(child_items or [str(key).strip()])
+        return [item for item in normalized if item]
     if isinstance(items, list):
         normalized: list[str] = []
         for item in items:
@@ -77,3 +87,47 @@ def update_todo(todos:list[dict[str,str]], todo_id, status, note:str=""):
         "note": note,
         "todos": updated
     }
+
+
+def render_todo_markdown(
+    todos: list[dict[str, Any]],
+    acceptance_criteria: list[str],
+    verification_commands: list[str],
+    plan_summary: str = "",
+) -> str:
+    lines = ["# MokioClaw Todo", ""]
+    if plan_summary:
+        lines.extend(["## Plan", "", plan_summary, ""])
+    lines.extend(["## Todos", ""])
+    if todos:
+        for todo in todos:
+            status = str(todo.get("status", "pending"))
+            box = {"pending": " ", "in_progress": "-", "completed": "x", "blocked": "!"}.get(status, " ")
+            note = str(todo.get("note", ""))
+            note_text = f" — {note}" if note else ""
+            lines.append(f"- [{box}] **{todo.get('id', '')}** `{status}` {todo.get('content', '')}{note_text}")
+    else:
+        lines.append("- [ ] No todos yet.")
+    if acceptance_criteria:
+        lines.extend(["", "## Acceptance Criteria", ""])
+        lines.extend(f"- {item}" for item in acceptance_criteria)
+    if verification_commands:
+        lines.extend(["", "## Verification Commands", ""])
+        lines.extend(f"- `{command}`" for command in verification_commands)
+    lines.append("")
+    return "\n".join(lines)
+
+
+def persist_todos(
+        state:RuntimeState,
+        todos:list[dict[str,str]],
+        verification_command:list[str],
+        acceptance_criteria:list[str],
+        plan_summary:str=""
+):
+    path = state.assert_workspace_path(state.workspace / TODO_FILE)
+    content = render_todo_markdown(todos, acceptance_criteria or [], verification_command or [], plan_summary)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    state.record_read(path,complete=True)
+    return {'ok': True, 'path': TODO_FILE, 'lines': len(content.splitlines()), "todos": todos}

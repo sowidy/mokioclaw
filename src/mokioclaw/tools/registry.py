@@ -5,6 +5,7 @@ from langchain_core.tools import StructuredTool
 from mokioclaw.core.state import RuntimeState
 from mokioclaw.tools.file_tools import read_file,write_file,edit_file
 from mokioclaw.tools.bash_tool import run_bash, bash_tool_description
+from mokioclaw.tools.notepad_tool import read_notepad, append_notepad
 from mokioclaw.tools.todo_tool import update_todo
 from mokioclaw.tools.web_search_tool import build_web_search_tool
 
@@ -40,9 +41,21 @@ def build_tools(state: RuntimeState):
         ),
         StructuredTool.from_function(
             name="BashTool",
-            func= lambda command, timeout_seconds=10: run_bash(state, command, timeout_seconds),
+            func=lambda command, timeout_seconds=None, run_in_background=False: run_bash(
+                state, command, timeout_seconds, run_in_background
+            ),
             description="Run a safe development shell command inside the workspace with timeout and output capture."
-        )
+        ),
+        StructuredTool.from_function(
+            name="NotepadReadTool",
+            func=lambda: read_notepad(state),
+            description="Read the durable workspace notepad from NOTEPAD.md.",
+        ),
+        StructuredTool.from_function(
+            name="NotepadAppendTool",
+            func=lambda heading, content: append_notepad(state, heading, content),
+            description="Append a durable markdown note to NOTEPAD.md. Args: heading, content.",
+        ),
     ]
 
 def _build_todo_update_tool(todos: list[dict[str, str]]):
@@ -68,7 +81,9 @@ def build_read_only_tools(state: RuntimeState) -> list[StructuredTool]:
         ),
         StructuredTool.from_function(
             name="BashTool",
-            func=lambda command, timeout_seconds=10: run_bash(state, command, timeout_seconds),
+            func=lambda command, timeout_seconds=None, run_in_background=False: run_bash(
+                state, command, timeout_seconds, run_in_background
+            ),
             description=bash_tool_description(),
         ),
         build_web_search_tool(),

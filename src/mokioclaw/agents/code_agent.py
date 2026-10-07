@@ -2,32 +2,24 @@ import json
 from typing import Callable, Any
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage, AIMessage
 from mokioclaw.agents.search_agent import _last_ai_content
+from mokioclaw.graph.memory import build_layered_memory, memory_event, format_layered_memory_for_prompt
 from mokioclaw.graph.state import MokioGraphState
 from mokioclaw.prompts.stage3 import CODE_AGENT_PROMPT
 from mokioclaw.providers.model_provider import create_model
 from mokioclaw.tools import build_tools
+from mokioclaw.tools.notepad_tool import read_notepad
 from mokioclaw.tools.registry import _build_todo_update_tool
-from mokioclaw.tools.todo_tool import update_todo
+from mokioclaw.tools.todo_tool import update_todo, persist_todos
 
 Writer = Callable[[dict[str, Any]], None] # ?
 
 
-def _code_agent_input(state: MokioGraphState, instruction: str, todos: list[dict[str, Any]]):
-    todo_text= '\n'.join(f"- {todo['id']} [{todo['status']} [{todo['note']}]" for todo in todos)
-    criteria_text = '\n'.join(f"- {item}" for item in state.get('acceptance_criteria', []))
-    command_text = "\n".join(f"- {command}" for command in state.get("verification_commands", []))
-    source_text = "\n".join(f"- {source.get('title',"")}:{source.get("url","")}" for source in state.get("sources", []))
-
+def _code_agent_input(state: MokioGraphState, instruction: str, memory: dict[str, Any]) -> str:
     return (
         f"Task: {state['task']}\n\n"
         f"Planner instruction:\n{instruction}\n\n"
-        f"Plan: {state.get('plan_summary', '')}\n\n"
-        f"Todos:\n{todo_text}\n\n"
-        f"Acceptance criteria:\n{criteria_text}\n\n"
-        f"Verification commands:\n{command_text}\n\n"
-        f"Research notes:\n{state.get('research_notes', '')}\n\n"
-        f"Sources:\n{source_text}\n\n"
-        f"Previous verifier failure:\n{state.get('last_error', '')}"
+        "Layered memory snapshot:\n"
+        f"{format_layered_memory_for_prompt(memory)}"
     )
 
 
@@ -82,11 +74,13 @@ def run_code_agent(
     instruction: str,
     *,
     writer: Writer | None = None,
-    max_loop: int = 4
+    max_loop: int = 8
 ):
     runtime = state.get('runtime')
     todos = [dict(todo) for todo in state.get('todos', [])]
     writer = writer or (lambda _: None)
+    memory = build_layered_memory({**state, "todos": todos}, node="codeAgent")
+    writer(memory_event(memory, node="codeAgent"))
     model = create_model()
     code_agent = model.bind_tools(build_tools(runtime) + [_build_todo_update_tool(todos)])
 
@@ -99,9 +93,7 @@ def run_code_agent(
     })
     messages = [
         SystemMessage(CODE_AGENT_PROMPT),
-        HumanMessage(
-            _code_agent_input(state, instruction, todos)
-        )
+        HumanMessage(content=_code_agent_input(state, instruction, memory)),
     ]
     produced_messages:list[Any] = []
     tool_events:list[dict[str, Any]] = []
@@ -126,6 +118,13 @@ def run_code_agent(
             tool_events.append(event)
             writer(event)
             if call.get("name") == "TodoUpdateTool":
+                persist_todos(
+                    runtime,
+                    todos,
+                    state.get("acceptance_criteria", []),
+                    state.get("verification_commands", []),
+                    state.get("plan_summary", ""),
+                )
                 writer(
                     {
                         "type": "todo_update",
