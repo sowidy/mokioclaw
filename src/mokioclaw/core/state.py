@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Callable
 
 from mokioclaw.core.approval import ApprovalRequest, ApprovalDecision, normalize_approval_mode
+from mokioclaw.core.checkpoint import normalize_checkpoint_mode
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,8 @@ class RuntimeState:
     bash_max_timeout_seconds: int = 600
     bash_max_output_chars: int = 6000
     bash_env_file: Path | None = None
+    checkpoint_mode: str = "light"
+    resume_from: Path | None = None
 
     def __post_init__(self) -> None:
         """
@@ -29,6 +32,7 @@ class RuntimeState:
         :return:
         """
         self.approval_mode = normalize_approval_mode(self.approval_mode)
+        self.checkpoint_mode = normalize_checkpoint_mode(self.checkpoint_mode)
 
     def assert_workspace_path(self, path: Path) -> Path:
         resolved = path.resolve()

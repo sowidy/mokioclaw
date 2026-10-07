@@ -58,16 +58,25 @@ def main(
             typer.Option("--approval-mode",
                          help="Human approval mode for high-risk BashTool commands: inline, auto, or deny."),
         ] = "inline",
+        checkpoint_mode: Annotated[
+            Literal["light", "strict", "off"],
+            typer.Option("--checkpoint-mode", help="Checkpoint mode: light, strict, or off."),
+        ] = "light",
+        resume: Annotated[
+            Path | None,
+            typer.Option("--resume", help="Resume from an existing MokioClaw workspace."),
+        ] = None,
 ):
     if ctx.invoked_subcommand is not None:
         return
     configure_console()
-    if not task:
+    if not task and resume is None:
         safe_echo(ctx.get_help())
         raise typer.Exit()
     # safe_secho("mokioclaw stage 1: create_agent ReAct loop", fg=typer.colors.MAGENTA)
     # safe_secho("mokioclaw stage 2: LangGraph planner -> actor -> verifier", fg=typer.colors.MAGENTA)
-    safe_secho("mokioclaw stage 4: MultiAgent + context compression", fg=typer.colors.MAGENTA)
+    # safe_secho("mokioclaw stage 4: MultiAgent + context compression", fg=typer.colors.MAGENTA)
+    safe_secho("mokioclaw stage 5: MultiAgent + context/harness engineering", fg=typer.colors.MAGENTA)
     approval_handler = _inline_approval_handler if approval_mode == "inline" else None
     for event in stream_agent_events(
         task,
@@ -75,5 +84,7 @@ def main(
         max_attempts=max_attempts,
         approval_mode=approval_mode,
         approval_handler=approval_handler,
+        checkpoint_mode=checkpoint_mode,
+        resume_workspace=resume,
     ):
         print_event(event)

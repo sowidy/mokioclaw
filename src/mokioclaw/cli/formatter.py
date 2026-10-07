@@ -48,12 +48,39 @@ def print_event(event: dict[str, Any]) -> None:
         console.print(Panel(str(event["path"]), title="Workspace", border_style="blue", box=box.ROUNDED))
         return
     if event_type == "custom_event":
-        print_custom_event(event["value"])
+        print_custom_event(event.get("event") or event.get("value") or {})
         return
     if event_type in ("graph_event", "agent_event"):
         print_graph_event(event.get("event") or event.get("value") or {})
         return
     console.print(_shorten(event))
+
+def render_checkpoint_saved(event: dict[str, Any]) -> None:
+    lines = [
+        f"mode: {event.get('mode', '')}",
+        f"status: {event.get('status', '')}",
+        f"path: {event.get('path', '')}",
+        f"checkpoint: {event.get('checkpoint_file', '')}",
+        f"recovery: {event.get('recovery_file', '')}",
+        f"git: {event.get('git_commit') or '(not available)'}",
+        f"resume: {event.get('resume_command', '')}",
+    ]
+    if event.get("git_error"):
+        lines.append(f"git_error: {_shorten(event.get('git_error'), 180)}")
+    style = "yellow" if event.get("status") == "interrupted" else "blue"
+    console.print(Panel("\n".join(lines), title="Checkpoint Saved", border_style=style, box=box.ROUNDED))
+
+
+def render_checkpoint_resumed(event: dict[str, Any]) -> None:
+    lines = [
+        f"mode: {event.get('mode', '')}",
+        f"workspace: {event.get('workspace', '')}",
+        f"source: {event.get('source', '')}",
+        f"fallback: {event.get('fallback', False)}",
+    ]
+    if event.get("reason"):
+        lines.append(f"reason: {_shorten(event.get('reason'), 300)}")
+    console.print(Panel("\n".join(lines), title="Checkpoint Resumed", border_style="green", box=box.ROUNDED))
 
 
 def print_custom_event(event: dict[str, Any]) -> None:
@@ -108,6 +135,12 @@ def print_custom_event(event: dict[str, Any]) -> None:
         return
     if event_type == "context_compression":
         render_context_compression(event)
+        return
+    if event_type == "checkpoint_saved":
+        render_checkpoint_saved(event)
+        return
+    if event_type == "checkpoint_resumed":
+        render_checkpoint_resumed(event)
         return
     console.print(Panel(_shorten(event, 1000), title="Event", box=box.ROUNDED))
 
