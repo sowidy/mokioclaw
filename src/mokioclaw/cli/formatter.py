@@ -44,8 +44,8 @@ def _shorten(value: Any, limit: int = 260) -> str:
 
 def print_event(event: dict[str, Any]) -> None:
     event_type = event.get("type")
-    if event_type == "workspace":
-        console.print(Panel(str(event["path"]), title="Workspace", border_style="blue", box=box.ROUNDED))
+    if event_type == "workplace":
+        console.print(Panel(str(event["path"]), title="Workplace", border_style="blue", box=box.ROUNDED))
         return
     if event_type == "custom_event":
         print_custom_event(event.get("event") or event.get("value") or {})
@@ -81,6 +81,28 @@ def render_checkpoint_resumed(event: dict[str, Any]) -> None:
     if event.get("reason"):
         lines.append(f"reason: {_shorten(event.get('reason'), 300)}")
     console.print(Panel("\n".join(lines), title="Checkpoint Resumed", border_style="green", box=box.ROUNDED))
+
+
+def render_trace_summary(event: dict[str, Any]) -> None:
+    node_visits = event.get("node_visits") if isinstance(event.get("node_visits"), dict) else {}
+    node_text = ", ".join(f"{node}:{count}" for node, count in node_visits.items()) or "(none)"
+    lines = [
+        f"trace: {event.get('trace_id', '')}",
+        f"status: {event.get('status', '')}",
+        f"duration_ms: {event.get('duration_ms', 0)}",
+        f"path: {event.get('trace_dir', '')}",
+        f"nodes: {node_text}",
+        f"tools: {event.get('tool_calls', 0)} total / {event.get('failed_tool_calls', 0)} failed",
+        f"approvals: {event.get('approval_count', 0)}",
+        f"checkpoints: {event.get('checkpoint_count', 0)}",
+        f"final: {event.get('final_status', '') or '(unknown)'}",
+    ]
+    errors = event.get("errors") if isinstance(event.get("errors"), list) else []
+    if errors:
+        lines.append("errors: " + _shorten(errors, 260))
+    style = "green" if event.get("status") == "finished" else "yellow"
+    console.print(Panel("\n".join(lines), title="Trace Summary", border_style=style, box=box.ROUNDED))
+
 
 
 def print_custom_event(event: dict[str, Any]) -> None:
@@ -141,6 +163,9 @@ def print_custom_event(event: dict[str, Any]) -> None:
         return
     if event_type == "checkpoint_resumed":
         render_checkpoint_resumed(event)
+        return
+    if event_type == "trace_summary":
+        render_trace_summary(event)
         return
     console.print(Panel(_shorten(event, 1000), title="Event", box=box.ROUNDED))
 

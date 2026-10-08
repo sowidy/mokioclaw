@@ -6,7 +6,7 @@ from mokioclaw.tools.file_tools import read_text_lossy
 NOTEPAD_FILE = "NOTEPAD.md"
 
 def read_notepad(state: RuntimeState):
-    path = state.assert_workspace_path(state.workspace / NOTEPAD_FILE)
+    path = state.assert_workplace_path(state.workplace / NOTEPAD_FILE)
     if not path.exists():
        return {'ok':False,'path':NOTEPAD_FILE,'content':"",'exists':False}
     content = read_text_lossy(path)
@@ -24,7 +24,7 @@ def append_notepad(state: RuntimeState, heading:str, content:str):
     """
     if not content.strip():
         return {'ok':False,'error':"content is empty"}
-    path = state.assert_workspace_path(state.workspace / NOTEPAD_FILE)
+    path = state.assert_workplace_path(state.workplace / NOTEPAD_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
     exists = read_text_lossy(path) if path.exists() else "# MokioClaw Notepad\n"
     title = heading.strip() or "Note"

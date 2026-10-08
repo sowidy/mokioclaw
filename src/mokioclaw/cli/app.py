@@ -25,6 +25,11 @@ def configure_console() -> None:
 
 
 def _inline_approval_handler(request: ApprovalRequest) -> ApprovalDecision:
+    """
+    真正读取人的操作
+    :param request:
+    :return:
+    """
     from mokioclaw.cli.formatter import console
 
     console.print(
@@ -66,6 +71,10 @@ def main(
             Path | None,
             typer.Option("--resume", help="Resume from an existing MokioClaw workspace."),
         ] = None,
+        trace_mode: Annotated[
+            Literal["on", "off"],
+            typer.Option("--trace-mode", help="Trace logging mode: on or off."),
+        ] = "on",
 ):
     if ctx.invoked_subcommand is not None:
         return
@@ -86,5 +95,6 @@ def main(
         approval_handler=approval_handler,
         checkpoint_mode=checkpoint_mode,
         resume_workspace=resume,
+        trace_mode=trace_mode,
     ):
         print_event(event)

@@ -7,7 +7,7 @@ TEXT_ENCODINGS = ("utf-8", "utf-8-sig", "gbk")
 
 def _strip_workplace_prefix(file_path: str):
     """
-    清理文件路径开头多余的 workspace/ 前缀，最后返回规范化后的路径。
+    清理文件路径开头多余的 workplace/ 前缀，最后返回规范化后的路径。
     :param file_path:
     :return:
     """
@@ -39,7 +39,7 @@ def read_text_lossy(path:Path):
     return path.read_text(encoding='utf8')
 
 
-def resolve_workspace_path(state: RuntimeState, path: str):
+def resolve_workplace_path(state: RuntimeState, path: str):
     """
     把用户提供的文件路径转换成一个安全的绝对路径，并确保它位于当前工作区内。
     :param state:
@@ -48,18 +48,18 @@ def resolve_workspace_path(state: RuntimeState, path: str):
     """
     raw = Path(_strip_workplace_prefix(path)).expanduser()
     if not raw.is_absolute():
-        raw = state.workspace / raw
-    return state.assert_workspace_path(raw)
+        raw = state.workplace / raw
+    return state.assert_workplace_path(raw)
 
 def display_path(state: RuntimeState, path: Path):
     try:
-        return str(path.resolve().relative_to(state.workspace.resolve()))
+        return str(path.resolve().relative_to(state.workplace.resolve()))
     except ValueError:
         return str(path)
 
 
 def read_file(state: RuntimeState, file_path: str, offset: int = 0, limit : int = MAX_READ_LINES):
-    path = resolve_workspace_path(state, file_path)
+    path = resolve_workplace_path(state, file_path)
     if not path.exists():
         return {
             'ok': False,
@@ -102,7 +102,7 @@ def read_file(state: RuntimeState, file_path: str, offset: int = 0, limit : int 
 
 
 def write_file(state: RuntimeState, file_path: str, data: str):
-    path = resolve_workspace_path(state, file_path)
+    path = resolve_workplace_path(state, file_path)
     exists = path.exists()
     if exists:
         snapshot = state.snapshot_for(path)
@@ -142,7 +142,7 @@ def write_file(state: RuntimeState, file_path: str, data: str):
 
 
 def edit_file(state: RuntimeState, file_path: str, old_text: str, new_text: str):
-    path = resolve_workspace_path(state, file_path)
+    path = resolve_workplace_path(state, file_path)
 
     if not path.exists():
         return {

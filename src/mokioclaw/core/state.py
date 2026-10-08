@@ -4,9 +4,10 @@ from typing import Callable
 
 from mokioclaw.core.approval import ApprovalRequest, ApprovalDecision, normalize_approval_mode
 from mokioclaw.core.checkpoint import normalize_checkpoint_mode
+from mokioclaw.core.trace import normalize_trace_mode
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True) # 不可变的数据类
 class FileSnapshot:
     path: Path
     mtime_ns: int
@@ -15,7 +16,7 @@ class FileSnapshot:
 
 @dataclass
 class RuntimeState:
-    workspace: Path
+    workplace: Path
     read_files: dict[Path, FileSnapshot] = field(default_factory=dict)
     approval_mode: str = "inline"
     approval_handler: Callable[[ApprovalRequest], ApprovalDecision | bool] | None = None # 一个接收 ApprovalRequest 参数，并返回 ApprovalDecision 或 bool 的可调用对象。
@@ -25,6 +26,8 @@ class RuntimeState:
     bash_env_file: Path | None = None
     checkpoint_mode: str = "light"
     resume_from: Path | None = None
+    trace_mode: str = "on"
+    trace_id: str | None = None
 
     def __post_init__(self) -> None:
         """
@@ -33,16 +36,18 @@ class RuntimeState:
         """
         self.approval_mode = normalize_approval_mode(self.approval_mode)
         self.checkpoint_mode = normalize_checkpoint_mode(self.checkpoint_mode)
+        self.trace_mode = normalize_trace_mode(self.trace_mode)
 
-    def assert_workspace_path(self, path: Path) -> Path:
+
+    def assert_workplace_path(self, path: Path) -> Path:
         resolved = path.resolve()
-        workspace = self.workspace.resolve()
-        if resolved != workspace and workspace not in resolved.parents:
-            raise ValueError(f"path must stay inside workspace: {workspace}")
+        workplace = self.workplace.resolve()
+        if resolved != workplace and workplace not in resolved.parents: # 检查是否位于 workplace 内
+            raise ValueError(f"path must stay inside workplace: {workplace}")
         return resolved
 
     def record_read(self, path: Path, *, complete: bool) -> None:
-        resolved = self.assert_workspace_path(path)
+        resolved = self.assert_workplace_path(path)
         stat = resolved.stat()
         self.read_files[resolved] = FileSnapshot(
             path=resolved,
@@ -51,4 +56,9 @@ class RuntimeState:
         )
 
     def snapshot_for(self, path: Path) -> FileSnapshot | None:
+        """
+        提取某一snapshot
+        :param path:
+        :return:
+        """
         return self.read_files.get(path.resolve())

@@ -24,16 +24,16 @@ def normalize_checkpoint_mode(mode: str | None) -> str:
     return normalized if normalized in VALID_CHECKPOINT_MODES else "light"
 
 
-def checkpoint_dir(workspace: Path) -> Path:
-    return workspace / CHECKPOINT_ROOT
+def checkpoint_dir(workplace: Path) -> Path:
+    return workplace / CHECKPOINT_ROOT
 
 class CheckpointManager:
     def __init__(self, runtime: Any, task: str = "") -> None:
         self.runtime = runtime
-        self.workspace = runtime.workspace
+        self.workplace = runtime.workplace
         self.mode = normalize_checkpoint_mode(getattr(runtime, "checkpoint_mode", "light"))
         self.task = task
-        self.root = checkpoint_dir(self.workspace)
+        self.root = checkpoint_dir(self.workplace)
 
     @property # 变成“只读属性”，调用时不需要加括号
     def enabled(self) -> bool:
@@ -50,19 +50,20 @@ class CheckpointManager:
         if not self.enabled:
             return None
 
+        # 先保存严格模式的完整状态，再生成通用检查点和人工可读恢复报告。
         self.root.mkdir(parents=True, exist_ok=True)
         if event is not None and self.mode == "strict":
             self._append_event(event)
 
         if self.mode == "strict":
-            _write_json(self.root / STATE_FILE, serialize_state(state))
-        manifest = workspace_manifest(self.workspace)
-        git_commit, git_error = snapshot_workspace_git(self.workspace, self.root)
-        payload = self._payload(state, status=status, latest_node=latest_node, manifest=manifest, git_commit=git_commit, git_error=git_error)
-        _write_json(self.root / CHECKPOINT_FILE, payload)
-        (self.root / RECOVERY_FILE).write_text(build_recovery_markdown(payload), encoding="utf-8")
+            _write_json(self.root / STATE_FILE, serialize_state(state)) # state转dict后进行json保存本地
+        manifest = workplace_manifest(self.workplace) # 采集工作目录下的文件清单
+        git_commit, git_error = snapshot_workplace_git(self.workplace, self.root) # git记录
+        payload = self._payload(state, status=status, latest_node=latest_node, manifest=manifest, git_commit=git_commit, git_error=git_error) # dict
+        _write_json(self.root / CHECKPOINT_FILE, payload) # 这里保存
+        (self.root / RECOVERY_FILE).write_text(build_recovery_markdown(payload), encoding="utf-8") # 转md
 
-        return checkpoint_saved_event(payload)
+        return checkpoint_saved_event(payload) # dict
 
     def _append_event(self, event: dict[str, Any]) -> None:
         line = {
@@ -83,13 +84,13 @@ class CheckpointManager:
             git_error: str | None,
     ) -> dict[str, Any]:
         task = str(state.get("task") or self.task or "")
-        summary = state_summary(state)
+        summary = state_summary(state) # summary dict
         return {
             "version": 1,
             "updated_at": utc_now(),
             "mode": self.mode,
             "status": status,
-            "workspace": str(self.workspace),
+            "workplace": str(self.workplace),
             "checkpoint_dir": str(self.root),
             "checkpoint_file": str(self.root / CHECKPOINT_FILE),
             "recovery_file": str(self.root / RECOVERY_FILE),
@@ -101,13 +102,13 @@ class CheckpointManager:
             "attempts": state.get("attempts", 0),
             "max_attempts": state.get("max_attempts", 0),
             "summary": summary,
-            "workspace_manifest": manifest,
+            "workplace_manifest": manifest,
             "git": {
                 "dir": str(self.root / GIT_DIR),
                 "commit": git_commit,
                 "error": git_error,
             },
-            "resume_command": resume_command(self.workspace),
+            "resume_command": resume_command(self.workplace),
         }
 
 def checkpoint_saved_event(payload: dict[str, Any]) -> dict[str, Any]:
@@ -116,7 +117,7 @@ def checkpoint_saved_event(payload: dict[str, Any]) -> dict[str, Any]:
         "type": "checkpoint_saved",
         "mode": payload.get("mode", ""),
         "status": payload.get("status", ""),
-        "workspace": payload.get("workspace", ""),
+        "workplace": payload.get("workplace", ""),
         "path": payload.get("checkpoint_dir", ""),
         "checkpoint_file": payload.get("checkpoint_file", ""),
         "recovery_file": payload.get("recovery_file", ""),
@@ -127,17 +128,17 @@ def checkpoint_saved_event(payload: dict[str, Any]) -> dict[str, Any]:
 
 def checkpoint_resumed_event(
     *,
-    workspace: Path,
+    workplace: Path,
     mode: str,
     source: str,
     fallback: bool = False,
     reason: str = "",
 ) -> dict[str, Any]:
-    root = checkpoint_dir(workspace)
+    root = checkpoint_dir(workplace)
     return {
         "type": "checkpoint_resumed",
         "mode": mode,
-        "workspace": str(workspace),
+        "workplace": str(workplace),
         "path": str(root),
         "source": source,
         "fallback": fallback,
@@ -150,31 +151,39 @@ def load_resume_inputs(
     task: str | None = None,
     max_attempts: int = 3,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    根据 checkpoint 模式恢复任务运行所需的状态，并返回恢复事件日志
+    :param runtime:
+    :param task:
+    :param max_attempts:
+    :return:
+    """
     requested_mode = normalize_checkpoint_mode(getattr(runtime, "checkpoint_mode", "light"))
     if requested_mode == "strict":
         try:
+            # 严格模式优先恢复完整状态；文件损坏或缺失时降级到轻量恢复。
             state = load_strict_state(runtime, max_attempts=max_attempts)
         except Exception as exc:
             inputs = build_light_resume_inputs(runtime, task=task, max_attempts=max_attempts)
             event = checkpoint_resumed_event(
-                workspace=runtime.workspace,
+                workplace=runtime.workplace,
                 mode="light",
-                source=str(checkpoint_dir(runtime.workspace) / RECOVERY_FILE),
+                source=str(checkpoint_dir(runtime.workplace) / RECOVERY_FILE),
                 fallback=True,
                 reason=f"strict resume unavailable: {type(exc).__name__}: {exc}",
             )
             return inputs, event
         event = checkpoint_resumed_event(
-            workspace=runtime.workspace,
+            workplace=runtime.workplace,
             mode="strict",
-            source=str(checkpoint_dir(runtime.workspace) / STATE_FILE),
+            source=str(checkpoint_dir(runtime.workplace) / STATE_FILE),
         )
         return state, event
     inputs = build_light_resume_inputs(runtime, task=task, max_attempts=max_attempts)
     event = checkpoint_resumed_event(
-        workspace=runtime.workspace,
+        workplace=runtime.workplace,
         mode="light",
-        source=str(checkpoint_dir(runtime.workspace) / RECOVERY_FILE),
+        source=str(checkpoint_dir(runtime.workplace) / RECOVERY_FILE),
     )
     return inputs, event
 
@@ -185,18 +194,18 @@ def load_strict_state(runtime: Any, *, max_attempts: int = 3) -> dict[str, Any]:
     :param max_attempts:
     :return:
     """
-    state_path = checkpoint_dir(runtime.workspace) / STATE_FILE
+    state_path = checkpoint_dir(runtime.workplace) / STATE_FILE
     raw = json.loads(state_path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("state.json is not an object")
-    state = deserialize_state(raw, runtime)
+    state = deserialize_state(raw, runtime) # 文件内容转state dict
     state["max_attempts"] = max_attempts
     metadata = dict(state.get("metadata", {}))
     metadata.update(
         {
             "resumed": True,
             "resume_mode": "strict",
-            "resume_workspace": str(runtime.workspace),
+            "resume_workplace": str(runtime.workplace),
         }
     )
     state["metadata"] = metadata
@@ -210,11 +219,11 @@ def build_light_resume_inputs(runtime: Any, *, task: str | None = None, max_atte
     :param max_attempts:
     :return:
     """
-    checkpoint = read_checkpoint(runtime.workspace)
-    recovery = read_checkpoint_text(runtime.workspace, RECOVERY_FILE)
-    todo = read_workspace_text(runtime.workspace, "TODO.md")
-    notepad = read_workspace_text(runtime.workspace, "NOTEPAD.md")
-    history = read_workspace_text(runtime.workspace, "HISTORY_SUMMARY.md")
+    checkpoint = read_checkpoint(runtime.workplace) # 检查文件是否存在，存在且返回内容数据
+    recovery = read_checkpoint_text(runtime.workplace, RECOVERY_FILE)
+    todo = read_workplace_text(runtime.workplace, "TODO.md")
+    notepad = read_workplace_text(runtime.workplace, "NOTEPAD.md")
+    history = read_workplace_text(runtime.workplace, "HISTORY_SUMMARY.md")
 
     original_task = str(checkpoint.get("task") or "").strip()
     resume_task = normalize_resume_task(task.strip() if isinstance(task, str) and task.strip() else original_task)
@@ -247,15 +256,16 @@ def build_light_resume_inputs(runtime: Any, *, task: str | None = None, max_atte
         "metadata": {
             "resumed": True,
             "resume_mode": "light",
-            "resume_workspace": str(runtime.workspace),
+            "resume_workplace": str(runtime.workplace),
             "original_task": original_task,
         },
     }
-    _copy_summary_fields(inputs, summary)
+    _copy_summary_fields(inputs, summary) # summary 只是检查点中的一部分，偏向“上次发生了什么  | inputs 工作流重新启动的完整初始状态，不仅包含历史摘要
+    # 后续还要把summary中的dict合并入input，正是_copy_summary_fields所作
     return inputs
 
-def read_checkpoint(workspace: Path) -> dict[str, Any]:
-    path = checkpoint_dir(workspace) / CHECKPOINT_FILE
+def read_checkpoint(workplace: Path) -> dict[str, Any]:
+    path = checkpoint_dir(workplace) / CHECKPOINT_FILE
     if not path.exists():
         return {}
     try:
@@ -284,8 +294,8 @@ def normalize_resume_task(task: str) -> str:
                 changed = True
     return normalized
 
-def read_checkpoint_text(workspace: Path, name: str) -> str:
-    path = checkpoint_dir(workspace) / name
+def read_checkpoint_text(workplace: Path, name: str) -> str:
+    path = checkpoint_dir(workplace) / name
     if not path.exists():
         return ""
     try:
@@ -293,8 +303,8 @@ def read_checkpoint_text(workspace: Path, name: str) -> str:
     except OSError:
         return ""
 
-def read_workspace_text(workspace: Path, name: str) -> str:
-    path = workspace / name
+def read_workplace_text(workplace: Path, name: str) -> str:
+    path = workplace / name
     if not path.exists():
         return ""
     try:
@@ -328,6 +338,7 @@ def deserialize_state(data: dict[str, Any], runtime: Any) -> dict[str, Any]:
     state = dict(data)
     messages = state.get("messages")
     if isinstance(messages, list):
+        # 消息需要恢复为 LangChain 对象，否则后续节点无法按消息接口处理。
         state["messages"] = deserialize_messages(messages)
     else:
         state["messages"] = []
@@ -390,7 +401,7 @@ def build_recovery_markdown(payload: dict[str, Any]) -> str:
     :return:
     """
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
-    manifest = payload.get("workspace_manifest") if isinstance(payload.get("workspace_manifest"), list) else []
+    manifest = payload.get("workplace_manifest") if isinstance(payload.get("workplace_manifest"), list) else []
     todos = summary.get("todos") if isinstance(summary.get("todos"), list) else []
     sources = summary.get("sources") if isinstance(summary.get("sources"), list) else []
     commands = summary.get("verification_commands") if isinstance(summary.get("verification_commands"), list) else []
@@ -405,7 +416,7 @@ def build_recovery_markdown(payload: dict[str, Any]) -> str:
         f"- latest_node: {payload.get('latest_node', '')}",
         f"- next_node: {payload.get('next_node', '')}",
         f"- attempts: {payload.get('attempts', 0)} / {payload.get('max_attempts', 0)}",
-        f"- workspace: {payload.get('workspace', '')}",
+        f"- workplace: {payload.get('workplace', '')}",
         f"- resume: `{payload.get('resume_command', '')}`",
         "",
         "## Task",
@@ -438,24 +449,25 @@ def build_recovery_markdown(payload: dict[str, Any]) -> str:
     lines.extend(_markdown_items([f"{item.get('path', '')} ({item.get('size', 0)} bytes)" for item in manifest[:40]]))
     return "\n".join(lines).rstrip() + "\n"
 
-def workspace_manifest(workspace: Path, *, limit: int = MAX_MANIFEST_ITEMS) -> list[dict[str, Any]]:
+def workplace_manifest(workplace: Path, *, limit: int = MAX_MANIFEST_ITEMS) -> list[dict[str, Any]]:
     """
     扫描工作区中的文件，并生成文件清单，用于记录检查点保存时工作区的大致状态。
     它记录的是文件清单和元信息，不是文件内容，也不会复制或备份文件本身。
-    :param workspace:
+    :param workplace:
     :param limit:
     :return:
     """
     items: list[dict[str, Any]] = []
-    if not workspace.exists():
+    if not workplace.exists():
         return items
-    for path in sorted(workspace.rglob("*")):
+    # 只记录文件元信息，不复制内容，并通过 limit 控制检查点大小。
+    for path in sorted(workplace.rglob("*")): # rglob("*") 会递归扫描工作区及其所有子文件夹中的文件
         if len(items) >= limit:
             break
         if not path.is_file():
             continue
-        rel = path.relative_to(workspace)
-        if should_skip_workspace_path(rel):
+        rel = path.relative_to(workplace)
+        if should_skip_workplace_path(rel): # 文件夹是要跳过的那种
             continue
         try:
             stat = path.stat()
@@ -470,54 +482,55 @@ def workspace_manifest(workspace: Path, *, limit: int = MAX_MANIFEST_ITEMS) -> l
         )
     return items
 
-def snapshot_workspace_git(workspace: Path, root: Path) -> tuple[str | None, str | None]:
+def snapshot_workplace_git(workplace: Path, root: Path) -> tuple[str | None, str | None]:
     """
     用 Git 为当前工作区创建一个检查点快照，这样任务中断后可以知道当时的代码状态。
-    :param workspace:
+    :param workplace:
     :param root:
     :return:
     """
     if shutil.which("git") is None:
         return None, "git executable not found"
 
-    workspace = workspace.resolve()
+    workplace = workplace.resolve()
     root = root.resolve()
     git_dir = root / GIT_DIR
     git_dir.mkdir(parents=True, exist_ok=True)
     try:
-        _git(workspace, git_dir, ["init", "-q"])
-        _git(workspace, git_dir, ["config", "user.name", "MokioClaw Checkpoint"])
-        _git(workspace, git_dir, ["config", "user.email", "mokioclaw-checkpoint@example.local"])
+        # 使用独立的 Git 目录保存快照，避免污染工作区自身的 Git 仓库。
+        _git(workplace, git_dir, ["init", "-q"])
+        _git(workplace, git_dir, ["config", "user.name", "MokioClaw Checkpoint"])
+        _git(workplace, git_dir, ["config", "user.email", "mokioclaw-checkpoint@example.local"])
         _ensure_git_excludes(git_dir)
-        _git(workspace, git_dir, ["add", "-A", "--", "."])
-        status = _git(workspace, git_dir, ["status", "--porcelain"]).stdout.strip()
-        head = git_head(workspace, git_dir)
+        _git(workplace, git_dir, ["add", "-A", "--", "."])
+        status = _git(workplace, git_dir, ["status", "--porcelain"]).stdout.strip()
+        head = git_head(workplace, git_dir)
         if not status and head:
             return head, None
         args = ["commit", "-q", "-m", f"checkpoint {utc_now()}"]
         if not status:
             args.append("--allow-empty")
-        _git(workspace, git_dir, args)
-        return git_head(workspace, git_dir), None
+        _git(workplace, git_dir, args)
+        return git_head(workplace, git_dir), None
     except Exception as exc:
-        return git_head(workspace, git_dir), f"{type(exc).__name__}: {exc}"
+        return git_head(workplace, git_dir), f"{type(exc).__name__}: {exc}"
 
-def git_head(workspace: Path, git_dir: Path) -> str | None:
+def git_head(workplace: Path, git_dir: Path) -> str | None:
     """
     获取检查点 Git 仓库当前最新提交的短哈希值
-    :param workspace:
+    :param workplace:
     :param git_dir:
     :return:
     """
     try:
-        result = _git(workspace, git_dir, ["rev-parse", "--short", "HEAD"])
+        result = _git(workplace, git_dir, ["rev-parse", "--short", "HEAD"])
     except Exception:
         return None
     value = result.stdout.strip()
     return value or None
 
-def resume_command(workspace: Path) -> str:
-    return f"uv run mokioclaw --resume {shlex.quote(str(workspace))}"
+def resume_command(workplace: Path) -> str:
+    return f"uv run mokioclaw --resume {shlex.quote(str(workplace))}"
 
 def json_safe(value: Any) -> Any:
     if isinstance(value, BaseMessage):
@@ -547,7 +560,7 @@ def trim_text(value: Any, limit: int) -> str:
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-def should_skip_workspace_path(rel: Path) -> bool:
+def should_skip_workplace_path(rel: Path) -> bool:
     parts = rel.parts # 得到路径的各级组成部分,类型是元组
     if len(parts) >= 2 and parts[0] == ".mokioclaw" and parts[1] == "checkpoints":
         return True
@@ -555,6 +568,12 @@ def should_skip_workspace_path(rel: Path) -> bool:
     return any(part in skip_names for part in parts)
 
 def _copy_summary_fields(inputs: dict[str, Any], summary: dict[str, Any]) -> None:
+    """
+    把 checkpoint 中保存的摘要字段，选择性复制到恢复用的 inputs 字典中。
+    :param inputs:
+    :param summary:
+    :return:
+    """
     for key in (
         "plan_summary",
         "todos",
@@ -575,21 +594,22 @@ def _markdown_items(items: list[Any]) -> list[str]:
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
+    # 先写临时文件再替换目标文件，避免进程中断留下半份 JSON。
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8") # 先写临时文件
     tmp.replace(path) # 写入成功后，用临时文件替换目标文件
 
 
-def _git(workspace: Path, git_dir: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+def _git(workplace: Path, git_dir: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
     """
     不用后台任务，是因为 _git 执行的是短时间、必须立即完成的 Git 操作，调用方需要马上知道结果。
-    :param workspace:
+    :param workplace:
     :param git_dir:
     :param args:
     :return:
     """
     return subprocess.run(
-        ["git", f"--git-dir={git_dir}", f"--work-tree={workspace}", *args],
-        cwd=workspace,
+        ["git", f"--git-dir={git_dir}", f"--work-tree={workplace}", *args],
+        cwd=workplace,
         check=True,
         text=True,
         capture_output=True,

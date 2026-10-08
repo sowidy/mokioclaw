@@ -35,7 +35,7 @@ MAX_TEXT_CHARS = {
 
 
 def read_history_summary(state: RuntimeState):
-    path = state.assert_workspace_path(state.workspace / HISTORY_SUMMARY_FILE)
+    path = state.assert_workplace_path(state.workplace / HISTORY_SUMMARY_FILE)
     if not path.exists():
         return {"ok": True, "path": HISTORY_SUMMARY_FILE, "content": "", "exists": False}
     content = read_text_lossy(path)
@@ -45,8 +45,8 @@ def read_history_summary(state: RuntimeState):
 
 def build_layered_memory(state: dict[str, Any],*,node:str="graph") -> dict[str, Any]:
     runtime = state["runtime"]
-    notepad = read_notepad(runtime)
-    history = read_history_summary(runtime)
+    notepad = read_notepad(runtime) # 读取notepad文件内容
+    history = read_history_summary(runtime) # 读取HISTORY_SUMMARY文件内容
     sources = [
         {
             "title": source.get("title", ""),
@@ -90,10 +90,21 @@ def build_layered_memory(state: dict[str, Any],*,node:str="graph") -> dict[str, 
     }
 
 def format_layered_memory_for_prompt(memory: dict[str, Any]) -> str:
+    """
+    dict 转 json
+    :param memory:
+    :return:
+    """
     return json.dumps(memory, ensure_ascii=False, indent=2, default=str)
 
 
 def memory_event(memory: dict[str, Any], *, node: str) -> dict[str, Any]:
+    """
+    dict 类型 snapshot
+    :param memory:
+    :param node:
+    :return:
+    """
     working = memory.get("working_memory", {})
     history = memory.get("history_summary_store", {})
     return {
@@ -115,6 +126,11 @@ def memory_event(memory: dict[str, Any], *, node: str) -> dict[str, Any]:
 
 
 def _event_layer_summary(layer: dict[str, Any]) -> str:
+    """
+    dict 转 json
+    :param layer:
+    :return: json
+    """
     if not layer:
         return "(empty)"
     text = json.dumps(layer, ensure_ascii=False, default=str)
@@ -122,7 +138,7 @@ def _event_layer_summary(layer: dict[str, Any]) -> str:
 
 
 def persist_history_summary(state: RuntimeState, summary: str) -> dict[str, Any]:
-    path = state.assert_workspace_path(state.workspace / HISTORY_SUMMARY_FILE)
+    path = state.assert_workplace_path(state.workplace / HISTORY_SUMMARY_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     content = f"# MokioClaw History Summary\n\n_Updated: {timestamp}_\n\n{summary.strip()}\n"

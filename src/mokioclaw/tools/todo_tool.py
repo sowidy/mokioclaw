@@ -125,7 +125,7 @@ def persist_todos(
         acceptance_criteria:list[str],
         plan_summary:str=""
 ):
-    path = state.assert_workspace_path(state.workspace / TODO_FILE)
+    path = state.assert_workplace_path(state.workplace / TODO_FILE)
     content = render_todo_markdown(todos, acceptance_criteria or [], verification_command or [], plan_summary)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")

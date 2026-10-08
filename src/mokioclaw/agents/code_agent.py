@@ -79,7 +79,7 @@ def run_code_agent(
     runtime = state.get('runtime')
     todos = [dict(todo) for todo in state.get('todos', [])]
     writer = writer or (lambda _: None)
-    memory = build_layered_memory({**state, "todos": todos}, node="codeAgent")
+    memory = build_layered_memory({**state, "todos": todos}, node="codeAgent") # 得到work和history的记忆
     writer(memory_event(memory, node="codeAgent"))
     model = create_model()
     code_agent = model.bind_tools(build_tools(runtime) + [_build_todo_update_tool(todos)])

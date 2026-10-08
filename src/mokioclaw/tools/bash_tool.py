@@ -56,6 +56,11 @@ def bash_tool_description() -> str:
 
 
 def _coerce_timeout(timeout_seconds: int | float | str):
+    """
+    规范时间为int或DEFAULT
+    :param timeout_seconds:
+    :return:
+    """
     if timeout_seconds is None:
         return DEFAULT_TIMEOUT_SECONDS
     try:
@@ -65,7 +70,12 @@ def _coerce_timeout(timeout_seconds: int | float | str):
 
 
 def _normalize_command(command: str) -> str:
-    if os.name == "nt":
+    """
+    根据当前操作系统，把 Agent 生成的命令转换成更适合当前环境执行的形式。
+    :param command:
+    :return:
+    """
+    if os.name == "nt": # Windows 分支
         normalized = re.sub(r"^\s*python3(\.exe)?\b", "python", command, count=1,flags=re.IGNORECASE)
         normalized = re.sub(r"\bls\s+-la\b", "dir", normalized)
         normalized = re.sub(r"\bls\b", "dir", normalized)
@@ -81,13 +91,19 @@ def _normalize_command(command: str) -> str:
 
 
 def _handle_tail_command(state: RuntimeState, command: str):
+    """
+    识别并直接处理简单的 tail 命令，读取文件末尾若干行，避免交给系统 shell 执行。
+    :param state:
+    :param command:
+    :return:
+    """
     match = re.fullmatch(r"\s*tail(?:\s+-n)?\s+(\d+)\s+(.+?)\s*", command)
     if not match:
         match = re.fullmatch(r"\s*tail\s+-(\d+)\s+(.+?)\s*", command)
     if not match:
         return None
-    count = int(match.group(1))
-    raw_path = shlex.split(match.group(2), posix=False)[0]
+    count = int(match.group(1)) # tail 后第一个参数：行数
+    raw_path = shlex.split(match.group(2), posix=False)[0] # 文件路径
     from mokioclaw.tools.file_tools import read_text_lossy, resolve_workspace_path
     path = resolve_workspace_path(state, raw_path)
     if not path.exists() or not path.is_file():
@@ -115,6 +131,11 @@ def _looks_dangerous(command:str):
     return None
 
 def _decode_output(output: bytes | str | None) -> str:
+    """
+    以不同解码方式正确获取文本
+    :param output:
+    :return:
+    """
     if output is None:
         return ""
     if isinstance(output, str):
@@ -148,7 +169,7 @@ def _resolve_approval(state: RuntimeState, command: str) -> dict[str, Any] | Non
             "error": f"human approval required for high-risk command: {risk_reason}",
         }
 
-    decision = state.approval_handler(request)
+    decision = state.approval_handler(request) # 获取人的决策
     if isinstance(decision, ApprovalDecision):
         approved = decision.approved
         decision_reason = decision.reason
@@ -193,7 +214,7 @@ def run_bash(
             'ok': True,
             'error': f"blocked potentially dangerous command pattern: {block}",
         }
-    approval = _resolve_approval(state, normalized_command)
+    approval = _resolve_approval(state, normalized_command) # 人的决策
     if approval is not None and not approval.get("approved"):
         return approval
     started = time.perf_counter()
@@ -207,7 +228,7 @@ def run_bash(
     try:
         completed = subprocess.run(
             normalized_command,
-            cwd=state.workspace,
+            cwd=state.workplace,
             shell=True,
             text=True,
             encoding="utf-8",
@@ -239,6 +260,13 @@ def run_bash(
 
 
 def _state_int(state: RuntimeState, name: str, default: int) -> int:
+    """
+    转int
+    :param state:
+    :param name:
+    :param default:
+    :return:
+    """
     try:
         value = int(getattr(state, name, default))
     except (TypeError, ValueError):
@@ -253,14 +281,19 @@ def _coerce_bool(value: bool | str) -> bool:
 
 
 def _build_env(state: RuntimeState) -> tuple[dict[str, str], str | None]:
-    env = os.environ.copy()
+    """
+    基于当前 Python 进程环境进行扩展
+    :param state:
+    :return:
+    """
+    env = os.environ.copy() # 复制当前进程环境，因此会继承当前进程中的变量
     env.setdefault("PYTHONIOENCODING", "utf-8")
     env.setdefault("PYTHONUTF8", "1")
     _prepend_harness_paths(state, env)
-    env_file = state.bash_env_file or state.workspace / ".mokioclaw.env"
+    env_file = state.bash_env_file or state.workplace / ".mokioclaw.env"
     if env_file.exists():
         try:
-            env.update(_parse_env_file(env_file, env))
+            env.update(_parse_env_file(env_file, env)) # 会覆盖前面已有的变量
         except OSError as exc:
             return env, f"failed to read bash env file {env_file}: {exc}"
     return env, None
@@ -275,9 +308,9 @@ def _prepend_harness_paths(state: RuntimeState, env: dict[str, str]) -> None:
     """
     path_candidates = [
         _ensure_toolchain_shims(state),
-        state.workspace / ".venv" / ("Scripts" if os.name == "nt" else "bin"),
-        state.workspace / "venv" / ("Scripts" if os.name == "nt" else "bin"),
-        state.workspace / "node_modules" / ".bin",
+        state.workplace / ".venv" / ("Scripts" if os.name == "nt" else "bin"),
+        state.workplace / "venv" / ("Scripts" if os.name == "nt" else "bin"),
+        state.workplace / "node_modules" / ".bin",
         Path(sys.executable).parent,
     ]
     existing = [part for part in env.get("PATH", "").split(os.pathsep) if part]
@@ -296,7 +329,7 @@ def _ensure_toolchain_shims(state: RuntimeState) -> Path:
     :param state:
     :return:
     """
-    shim_dir = state.workspace / ".mokioclaw" / "shims"
+    shim_dir = state.workplace / ".mokioclaw" / "shims"
     shim_dir.mkdir(parents=True, exist_ok=True)
     python_executable = sys.executable
     if os.name == "nt":
@@ -405,18 +438,26 @@ def _expand_env_value(value: str, env: dict[str, str]) -> str:
 
 
 def _format_captured_output(state: RuntimeState, stdout: str, stderr: str, max_output_chars: int) -> dict[str, Any]:
+    """
+    限制命令输出大小，并把超长输出保存到 workplace 文件中
+    :param state:
+    :param stdout:
+    :param stderr:
+    :param max_output_chars:
+    :return:
+    """
     output: dict[str, Any] = {}
-    output_dir = state.workspace / ".mokioclaw" / "bash-outputs"
+    output_dir = state.workplace / ".mokioclaw" / "bash-outputs"
     output_dir.mkdir(parents=True, exist_ok=True)
     if len(stdout) > max_output_chars:
         stdout_path = output_dir / f"stdout-{time.time_ns()}.log"
         stdout_path.write_text(stdout, encoding="utf-8", errors="replace")
-        output["stdout_path"] = str(stdout_path.relative_to(state.workspace))
+        output["stdout_path"] = str(stdout_path.relative_to(state.workplace))
         output["stdout_truncated"] = True
     if len(stderr) > max_output_chars:
         stderr_path = output_dir / f"stderr-{time.time_ns()}.log"
         stderr_path.write_text(stderr, encoding="utf-8", errors="replace")
-        output["stderr_path"] = str(stderr_path.relative_to(state.workspace))
+        output["stderr_path"] = str(stderr_path.relative_to(state.workplace))
         output["stderr_truncated"] = True
     output["stdout"] = stdout[:max_output_chars]
     output["stderr"] = stderr[:max_output_chars]
@@ -429,7 +470,7 @@ def _run_background(
     env: dict[str, str],
     approval: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    output_dir = state.workspace / ".mokioclaw" / "background"
+    output_dir = state.workplace / ".mokioclaw" / "background"
     output_dir.mkdir(parents=True, exist_ok=True)
     stamp = time.time_ns()
     stdout_path = output_dir / f"job-{stamp}.out"
@@ -439,7 +480,7 @@ def _run_background(
     try:
         process = subprocess.Popen(
             command,
-            cwd=state.workspace,
+            cwd=state.workplace,
             shell=True,
             stdout=stdout_handle,
             stderr=stderr_handle,
@@ -459,8 +500,8 @@ def _run_background(
         "exit_code": None,
         "stdout": "",
         "stderr": "",
-        "stdout_path": str(stdout_path.relative_to(state.workspace)),
-        "stderr_path": str(stderr_path.relative_to(state.workspace)),
+        "stdout_path": str(stdout_path.relative_to(state.workplace)),
+        "stderr_path": str(stderr_path.relative_to(state.workplace)),
         "duration_ms": 0,
         **(approval or {}),
     }
