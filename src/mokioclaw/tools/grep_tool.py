@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from mokioclaw.core.state import RuntimeState
-from mokioclaw.tools.file_tools import resolve_workspace_path, display_path, read_text_lossy
+from mokioclaw.tools.file_tools import resolve_workplace_path, display_path, read_text_lossy
 
 SKIP_DIRS = {'.git', '.mokioclaw', '.venv','__pycache__', '.pytest_cache'}
 
@@ -64,7 +64,7 @@ def grep(
             'error':"head_limit must be > 0"
         }
 
-    root = resolve_workspace_path(state, path)
+    root = resolve_workplace_path(state, path)
     if root.is_file():
         candidates = [root]
     elif root.is_dir():

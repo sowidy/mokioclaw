@@ -34,7 +34,7 @@ YOIMIYA_TODOS = [
 ]
 
 YOIMIYA_CRITERIA = [
-    "yoimiya_profile.html exists in the workspace.",
+    "yoimiya_profile.html exists in the workplace.",
     "The page mentions 宵宫 and 原神.",
     "The page introduces identity, traits, abilities, and story role.",
     "The page includes at least two source links.",
@@ -49,6 +49,125 @@ DEFAULT_TODOS = [
     "Delegate specialist work needed for the task.",
     "Verify the generated result.",
 ]
+
+INTENT_ROUTER_PROMPT = """You are the intent router for MokioClaw.
+
+Classify the user's latest input into exactly one route:
+
+- chat: greetings, thanks, identity/help questions, ordinary conceptual Q&A, or conversational messages that do not need workplace access.
+- workflow: any request that needs creating/editing/reading files, running commands, installing packages, searching the web, checking the current project, verifying a result, or producing a concrete deliverable.
+
+When session context is provided, use it only to understand whether the latest
+input is a continuation of prior coding work. A short follow-up like "继续",
+"修一下", or "运行测试" should be workflow if it refers to prior workplace work.
+
+Return only JSON with this shape:
+{"route":"chat"|"workflow","reason":"brief reason","confidence":0.0}
+
+If uncertain, choose workflow.
+"""
+
+CHAT_RESPONDER_PROMPT = """You are MokioClaw's lightweight chat node.
+
+Answer the user directly and concisely. Do not claim that you read files,
+searched the web, ran commands, edited files, or inspected the workplace.
+If the user asks for work requiring tools or project context, say that it
+should be handled by the workflow route.
+
+If session context is provided, you may use the recent conversation summary to
+answer conversational follow-ups, but do not invent workplace facts.
+"""
+def _router_input(state: MokioGraphState) -> str:
+    parts = [f"User input:\n{state.get('task', '')}"]
+    if state.get("session_context"):
+        parts.append("Session context:\n" + str(state.get("session_context", "")))
+    return "\n\n".join(parts)
+
+
+def _chat_input(state: MokioGraphState) -> str:
+    parts = [f"User input:\n{state.get('task', '')}"]
+    if state.get("session_context"):
+        parts.append("Session context:\n" + str(state.get("session_context", "")))
+    return "\n\n".join(parts)
+
+
+def _coerce_confidence(value: Any) -> float:
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(1.0, confidence))
+
+
+def intent_router_node(state: MokioGraphState) -> dict[str, Any]:
+    """
+    判断当前用户对话意图，是简单对话还是需要开启工作流
+    :param state:
+    :return:
+    """
+    writer = _get_writer()
+    route = "workflow"
+    reason = "router fallback: default to workflow"
+    confidence = 0.0
+    try:
+        response = create_model().invoke(
+            [
+                SystemMessage(content=INTENT_ROUTER_PROMPT),
+                HumanMessage(content=_router_input(state)),
+            ]
+        )
+        parsed = _extract_json2dict(str(response.content)) or {}
+        candidate = str(parsed.get("route", "")).strip().lower()
+        parsed_confidence = _coerce_confidence(parsed.get("confidence"))
+        if candidate in {"chat", "workflow"} and parsed_confidence >= 0.55:
+            route = candidate
+            confidence = parsed_confidence
+            reason = str(parsed.get("reason") or "")
+        else:
+            reason = str(parsed.get("reason") or "router returned low-confidence or invalid route")
+            confidence = parsed_confidence
+    except Exception as exc:
+        reason = f"router error: {type(exc).__name__}: {exc}"
+
+    event = {
+        "type": "intent_decision",
+        "route": route,
+        "reason": reason,
+        "confidence": confidence,
+    }
+    writer(event)
+    return {
+        "intent_route": route,
+        "intent_reason": reason,
+        "intent_confidence": confidence,
+    }
+
+def intent_route_fn(state: MokioGraphState) -> str:
+    return "chat_responder" if state.get("intent_route") == "chat" else "planner"
+
+def chat_responder_node(state: MokioGraphState) -> dict[str, Any]:
+    writer = _get_writer()
+    try:
+        response = create_model().invoke(
+            [
+                SystemMessage(content=CHAT_RESPONDER_PROMPT),
+                HumanMessage(content=_chat_input(state)),
+            ]
+        )
+        text = str(getattr(response, "content", "") or "").strip()
+    except Exception as exc:
+        text = f"这是轻量聊天分支，但模型回复暂不可用：{type(exc).__name__}: {exc}"
+    if not text:
+        text = "我在。你可以继续提问，或者直接描述一个需要我完成的任务。"
+    event = {
+        "type": "chat_response",
+        "mode": "lightweight",
+        "reason": state.get("intent_reason", ""),
+        "response": text,
+    }
+    writer(event)
+    return {"chat_response": text, "final_answer": text}
+
 
 def _extract_json2dict(text:str):
     """
@@ -236,12 +355,14 @@ def _list_text(items: list[str]) -> str:
 
 
 def _planner_input(state: MokioGraphState, memory: dict[str, Any]) -> str:
-    return (
-        f"Task: {state['task']}\n"
-        f"Attempt: {state.get('attempts', 0) + 1}\n\n"
-        "Layered memory snapshot:\n"
-        f"{format_layered_memory_for_prompt(memory)}"
-    )
+    parts = [
+        f"Task: {state['task']}",
+        f"Attempt: {state.get('attempts', 0) + 1}",
+    ]
+    if state.get("session_context"):
+        parts.append("Session context for this multi-turn coding session:\n" + str(state.get("session_context", "")))
+    parts.append("Layered memory snapshot:\n" + format_layered_memory_for_prompt(memory))
+    return "\n\n".join(parts)
 
 
 def _execute_planner_tool(state: MokioGraphState, writer, call: dict[str, Any]) -> ToolMessage:
@@ -358,12 +479,12 @@ def _tool_result_event(tool_message,*, node: str):
 
 
 def _verifier_input(state: MokioGraphState, memory: dict[str, Any]) -> str:
-    return (
-        f"Task: {state['task']}\n\n"
-        "Layered memory snapshot:\n"
-        f"{format_layered_memory_for_prompt(memory)}\n\n"
-        "Inspect the workspace with tools and return only verifier JSON."
-    )
+    parts = [f"Task: {state['task']}"]
+    if state.get("session_context"):
+        parts.append("Session context for this multi-turn coding session:\n" + str(state.get("session_context", "")))
+    parts.append("Layered memory snapshot:\n" + format_layered_memory_for_prompt(memory))
+    parts.append("Inspect the workplace with tools and return only verifier JSON.")
+    return "\n\n".join(parts)
 
 
 def _execute_read_only_tool(state: MokioGraphState, call: dict[str, Any]) -> ToolMessage:
@@ -476,7 +597,7 @@ def verifier_node(state: MokioGraphState):
                         "passed": False,
                         "reason": "Verifier stopped after the maximum tool loop count.",
                         "checks": [],
-                        "recommended_next_instruction": "Inspect the workspace and complete the unfinished task.",
+                        "recommended_next_instruction": "Inspect the workplace and complete the unfinished task.",
                     },
                     ensure_ascii=False,
                 )

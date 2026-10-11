@@ -83,3 +83,12 @@ class MokioGraphState(TypedDict,total=False):
 
     memory_snapshot:dict[str, Any]
     history_summary: str
+
+    intent_route: str
+    intent_reason: str
+    intent_confidence: float
+    chat_response: str
+
+    session_id: str
+    session_turn: int
+    session_context: str

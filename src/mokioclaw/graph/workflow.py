@@ -10,7 +10,7 @@ from mokioclaw.graph.nodes import (
     context_monitor_route,
     final_node,
     planner_node,
-    verifier_node,
+    verifier_node, intent_router_node, chat_responder_node, intent_route_fn,
 )
 from mokioclaw.graph.state import MokioGraphState
 
@@ -38,7 +38,23 @@ def _save_workflow_diagram(graph, path: str = "workflow.png") -> None:
             print(f"[workflow] diagram render failed: {type(exc2).__name__}: {exc2}")
 
 
-def build_workflow():
+def build_entry_workflow():
+    builder = StateGraph(MokioGraphState)
+    builder.add_node("intent_router", intent_router_node)
+    builder.add_node("chat_responder", chat_responder_node)
+
+    builder.add_edge(START, "intent_router")
+    builder.add_conditional_edges("intent_router", intent_route_fn,path_map={
+        "chat_responder": "chat_responder",
+        "planner": END},
+    )
+    builder.add_edge("chat_responder", END)
+    graph = builder.compile()
+    _save_workflow_diagram(graph, path="chat-workflow.png")
+    return graph
+
+
+def build_complex_workflow():
     builder = StateGraph(MokioGraphState)
     builder.add_node("planner", planner_node)
     builder.add_node("context_compressor", context_compressor_node)

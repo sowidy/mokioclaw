@@ -104,6 +104,50 @@ def render_trace_summary(event: dict[str, Any]) -> None:
     console.print(Panel("\n".join(lines), title="Trace Summary", border_style=style, box=box.ROUNDED))
 
 
+def render_intent_decision(event: dict[str, Any]) -> None:
+    lines = [
+        f"route: {event.get('route', '')}",
+        f"confidence: {event.get('confidence', 0)}",
+        f"reason: {_shorten(event.get('reason', ''), 600)}",
+    ]
+    style = "cyan" if event.get("route") == "chat" else "magenta"
+    console.print(Panel("\n".join(lines), title="Intent Router", border_style=style, box=box.ROUNDED))
+
+
+def render_chat_response(event: dict[str, Any]) -> None:
+    lines = [_shorten(event.get("response", ""), 1600)]
+    reason = event.get("reason")
+    if reason:
+        lines.append(f"\nmode: {event.get('mode', 'lightweight')} | reason: {reason}")
+    console.print(Panel("\n".join(lines), title="MokioClaw", border_style="cyan", box=box.ROUNDED))
+
+
+def render_session_event(event: dict[str, Any]) -> None:
+    event_type = event.get("type", "")
+    if event_type == "session_started":
+        title = "Session Started"
+        lines = [
+            f"session: {event.get('session_id', '')}",
+            f"workspace: {event.get('workspace', '')}",
+            f"turns: {event.get('turn_index', 0)}",
+            f"resumed: {event.get('resumed', False)}",
+        ]
+    elif event_type == "session_turn_started":
+        title = "Session Turn"
+        lines = [
+            f"turn: {event.get('turn', 0)}",
+            f"task: {_shorten(event.get('task', ''), 900)}",
+        ]
+    else:
+        title = "Session Saved"
+        lines = [
+            f"turn: {event.get('turn', 0)}",
+            f"route: {event.get('route', '')}",
+            f"summary: {event.get('summary_file', '')}",
+        ]
+    console.print(Panel("\n".join(lines), title=title, border_style="cyan", box=box.ROUNDED))
+
+
 
 def print_custom_event(event: dict[str, Any]) -> None:
     event_type = event.get("type")
@@ -137,6 +181,9 @@ def print_custom_event(event: dict[str, Any]) -> None:
             )
         )
         return
+    if event_type in {"session_started", "session_turn_started", "session_turn_saved"}:
+        render_session_event(event)
+        return
     if event_type == "handoff":
         render_handoff(event)
         return
@@ -166,6 +213,12 @@ def print_custom_event(event: dict[str, Any]) -> None:
         return
     if event_type == "trace_summary":
         render_trace_summary(event)
+        return
+    if event_type == "intent_decision":
+        render_intent_decision(event)
+        return
+    if event_type == "chat_response":
+        render_chat_response(event)
         return
     console.print(Panel(_shorten(event, 1000), title="Event", box=box.ROUNDED))
 
